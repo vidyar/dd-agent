@@ -397,6 +397,6 @@ class checks(object):
         checksData['metrics'] = metrics
 
         # Send back data
-        self.checksLogger.debug("checksData: %s" % checksData)
+        #self.checksLogger.debug("checksData: %s" % checksData)
         self.emitter(checksData, self.checksLogger, self.agentConfig)
         self.checksLogger.info("Checks done")
