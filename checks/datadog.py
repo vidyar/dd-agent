@@ -8,6 +8,7 @@ from datetime import datetime
 from itertools import groupby # >= python 2.4
 
 from checks import LaconicFilter
+from dogstatsd import MetricsAggregator
 
 if hasattr('some string', 'partition'):
     def partition(s, sep):
@@ -37,8 +38,8 @@ class Dogstreams(object):
             # Expecting dogstreams config value to look like:
             #   <dogstream value>, <dog stream value>, ...
             # Where <dogstream value> looks like:
-            #   <log path> 
-            # or 
+            #   <log path>
+            # or
             #   <log path>:<module>:<parser function>
 
             # Create a Dogstream object for each <dogstream value>
@@ -56,29 +57,29 @@ class Dogstreams(object):
                         logger.warn("Invalid dogstream: %s" % ':'.join(parts))
                 except:
                     logger.exception("Cannot build dogstream")
-        
+
         perfdata_parsers = NagiosPerfData.init(logger, config)
         if perfdata_parsers:
             dogstreams.extend(perfdata_parsers)
-        
+
         logger.info("Dogstream parsers: %s" % repr(dogstreams))
 
         return cls(logger, dogstreams)
-    
+
     def __init__(self, logger, dogstreams):
         self.logger = logger
 
         self.dogstreams = dogstreams
-    
+
     def check(self, agentConfig, move_end=True):
         if not self.dogstreams:
             return {}
-        
+
         output = {}
         for dogstream in self.dogstreams:
             try:
                 result = dogstream.check(agentConfig, move_end)
-                # result may contain {"dogstream": [new]}. 
+                # result may contain {"dogstream": [new]}.
                 # If output contains {"dogstream": [old]}, that old value will get concatenated with the new value
                 assert type(result) == type(output), "dogstream.check must return a dictionary"
                 for k in result:
@@ -95,47 +96,46 @@ class Dogstream(object):
     @classmethod
     def init(cls, logger, log_path, parser_spec=None):
         parse_func = None
-        
+
         if parser_spec:
             try:
                 module_name, func_name = parser_spec.split(':')
                 __import__(module_name)
-                parse_func = getattr(sys.modules[module_name], func_name, 
+                parse_func = getattr(sys.modules[module_name], func_name,
                     None)
             except:
                 logger.exception(traceback.format_exc())
                 logger.error('Could not load Dogstream line parser "%s" PYTHONPATH=%s' % (
-                    parser_spec, 
+                    parser_spec,
                     os.environ.get('PYTHONPATH', ''))
                 )
             logger.info("dogstream: parsing %s with %s" % (log_path, parse_func))
         else:
             logger.info("dogstream: parsing %s with default parser" % log_path)
-        
+
         return cls(logger, log_path, parse_func)
-    
+
     def __init__(self, logger, log_path, parse_func=None):
         self.logger = logger
 
         # Apply LaconicFilter to avoid log flooding
         self.logger.addFilter(LaconicFilter("dogstream"))
-        
+
         self.log_path = log_path
         self.parse_func = parse_func or self._default_line_parser
-        
+
         self._gen = None
-        self._values = None
         self._freq = 15 # Will get updated on each check()
         self._error_count = 0L
         self._line_count = 0L
         self.parser_state = {}
-    
+        self._aggregator = MetricsAggregator(None, self._freq)
+
     def check(self, agentConfig, move_end=True):
         if self.log_path:
             self._freq = int(agentConfig.get('checkFreq', 15))
-            self._values = []
             self._events = []
-        
+
             # Build our tail -f
             if self._gen is None:
                 self._gen = TailFile(self.logger, self.log_path, self._line_parser).tail(line_by_line=False, move_end=move_end)
@@ -143,18 +143,19 @@ class Dogstream(object):
             # read until the end of file
             try:
                 self._gen.next()
-                self.logger.debug("Done dogstream check for file %s, found %s metric points" % (self.log_path, len(self._values)))
+                self.logger.debug("Done dogstream check for file %s, found %s metric points" %
+                                                                (self.log_path, self._aggregator.count))
             except StopIteration, e:
                 self.logger.exception(e)
                 self.logger.warn("Can't tail %s file" % self.log_path)
-            
-            check_output = self._aggregate(self._values)
+
+            check_output = self._aggregator.flush_dogstream_metrics()
             if self._events:
                 check_output.update({"dogstreamEvents": self._events})
             return check_output
         else:
             return {}
-    
+
     def _line_parser(self, line):
         try:
             # alq - Allow parser state to be kept between invocations
@@ -170,10 +171,10 @@ class Dogstream(object):
                 parsed = self.parse_func(self.logger, line)
 
             self._line_count += 1
-                
+
             if parsed is None:
                 return
-            
+
             if isinstance(parsed, (tuple, dict)):
                 parsed = [parsed]
 
@@ -199,7 +200,7 @@ class Dogstream(object):
                     metric, ts, value, attrs = datum
                 except:
                     continue
-                
+
                 # Validation
                 invalid_reasons = []
                 try:
@@ -216,15 +217,15 @@ class Dogstream(object):
                     invalid_reasons.append('invalid metric value')
 
                 if invalid_reasons:
-                    self.logger.debug('Invalid parsed values %s (%s): "%s"', 
+                    self.logger.debug('Invalid parsed values %s (%s): "%s"',
                         repr(datum), ', '.join(invalid_reasons), line)
                 else:
-                    self._values.append((metric, ts, value, attrs))
+                    self._aggregator.submit_dogstream_metric(metric, ts, value, attrs)
         except Exception, e:
-            self.logger.debug("Error while parsing line %s" % line)
+            self.logger.debug("Error while parsing line %s: %s" % (line, str(e)))
             self._error_count += 1
             self.logger.error("Parser error: %s out of %s" % (self._error_count, self._line_count))
-    
+
     def _default_line_parser(self, logger, line):
         original_line = line
         sep = ' '
@@ -240,50 +241,8 @@ class Dogstream(object):
                 attributes[key] = val
         except Exception, e:
             logger.debug(traceback.format_exc())
-        
-        return metric, timestamp, value, attributes
-    
-    def _aggregate(self, values):
-        """ Aggregate values down to the second and store as:
-            {
-                "dogstream": [(metric, timestamp, value, {key: val})]
-            }
-            If there are many values per second for a metric, take the median
-        """
-        output = []
-        
-        values.sort(key=point_sorter)
 
-        for (timestamp, metric, host_name, device_name), val_attrs in groupby(values, key=point_sorter):
-            attributes = {}
-            vals = []
-            for _metric, _timestamp, v, a in val_attrs:
-                try:
-                    v = float(v)
-                    vals.append(v)
-                    attributes.update(a)
-                except:
-                    self.logger.debug("Could not convert %s into a float", v)
-            
-            if len(vals) == 1:
-                val = vals[0]
-            elif len(vals) > 1:
-                val = vals[-1]
-            else: # len(vals) == 0
-                continue
-            
-            metric_type = str(attributes.get('metric_type', '')).lower()
-            if metric_type == 'gauge':
-                val = float(val)
-            elif metric_type == 'counter':
-                val = int(val)            
-            
-            output.append((metric, timestamp, val, attributes))
-        
-        if output:
-            return {"dogstream": output}
-        else:
-            return {}
+        return metric, timestamp, value, attributes
 
 class InvalidDataTemplate(Exception): pass
 
@@ -291,12 +250,12 @@ class NagiosPerfData(object):
     perfdata_field = '' # Should be overriden by subclasses
     metric_prefix = 'nagios'
     pair_pattern = re.compile(r"".join([
-            r"'?(?P<label>[^=']+)'?=", 
-            r"(?P<value>[-0-9.]+)", 
-            r"(?P<unit>s|us|ms|%|B|KB|MB|GB|TB|c)?", 
-            r"(;(?P<warn>@?[-0-9.~]*:?[-0-9.~]*))?", 
-            r"(;(?P<crit>@?[-0-9.~]*:?[-0-9.~]*))?", 
-            r"(;(?P<min>[-0-9.]*))?", 
+            r"'?(?P<label>[^=']+)'?=",
+            r"(?P<value>[-0-9.]+)",
+            r"(?P<unit>s|us|ms|%|B|KB|MB|GB|TB|c)?",
+            r"(;(?P<warn>@?[-0-9.~]*:?[-0-9.~]*))?",
+            r"(;(?P<crit>@?[-0-9.~]*:?[-0-9.~]*))?",
+            r"(;(?P<min>[-0-9.]*))?",
             r"(;(?P<max>[-0-9.]*))?",
         ]))
 
@@ -310,13 +269,13 @@ class NagiosPerfData(object):
             host_parser = NagiosHostPerfData.init(logger, nagios_config)
             if host_parser:
                 parsers.append(host_parser)
-            
-            service_parser = NagiosServicePerfData.init(logger, nagios_config)            
+
+            service_parser = NagiosServicePerfData.init(logger, nagios_config)
             if service_parser:
                 parsers.append(service_parser)
-            
+
         return parsers
-    
+
     @staticmethod
     def template_regex(file_template):
         try:
@@ -328,7 +287,7 @@ class NagiosPerfData(object):
         except Exception, e:
             raise InvalidDataTemplate("%s (%s)"% (file_template, e))
 
-    
+
     @staticmethod
     def underscorize(s):
         return s.replace(' ', '_').lower()
@@ -358,16 +317,16 @@ class NagiosPerfData(object):
         finally:
             f.close()
 
-        return output 
+        return output
 
     def __init__(self, logger, line_pattern, datafile):
         if isinstance(line_pattern, (str, unicode)):
             self.line_pattern = re.compile(line_pattern)
         else:
             self.line_pattern = line_pattern
-                
+
         self._dogstream = Dogstream(logger, datafile, self._parse_line)
-    
+
     def _get_metric_prefix(self, data):
         # Should be overridded by subclasses
         return [self.metric_prefix]
@@ -378,7 +337,7 @@ class NagiosPerfData(object):
         if matched:
             data = matched.groupdict()
             metric_prefix = self._get_metric_prefix(data)
-            
+
             # Parse the prefdata values, which are a space-delimited list of:
             #   'label'=value[UOM];[warn];[crit];[min];[max]
             perf_data = data.get(self.perfdata_field, '').split(' ')
@@ -388,7 +347,7 @@ class NagiosPerfData(object):
                     continue
                 else:
                     pair_data = pair_match.groupdict()
-                
+
                 label = pair_data['label']
                 timestamp = data.get('TIMET', '')
                 value = pair_data['value']
@@ -461,7 +420,7 @@ class NagiosServicePerfData(NagiosPerfData):
             return None
 
     def _get_metric_prefix(self, line_data):
-        metric = [self.metric_prefix] 
+        metric = [self.metric_prefix]
         middle_name = line_data.get('SERVICEDESC', None)
         if middle_name:
             metric.append(middle_name.replace(' ', '_').lower())
@@ -486,14 +445,14 @@ class DdForwarder(object):
 
     def _init_metrics(self):
         self.metrics = {}
-   
+
     def _add_metric(self, name, value, ts):
 
         if self.metrics.has_key(name):
             self.metrics[name].append((ts, value))
         else:
             self.metrics[name] = [(ts, value)]
- 
+
     def _parse_line(self, line):
 
         try:
@@ -508,13 +467,13 @@ class DdForwarder(object):
     def check(self, agentConfig, move_end=True):
 
         if self.log_path and os.path.isfile(self.log_path):
-            
+
             #reset metric points
             self._init_metrics()
 
             # Build our tail -f
             if self._gen is None:
-                self._gen = TailFile(self.logger, self.log_path, self._parse_line).tail(line_by_line=False, 
+                self._gen = TailFile(self.logger, self.log_path, self._parse_line).tail(line_by_line=False,
                     move_end=move_end)
 
             # read until the end of file
@@ -533,7 +492,7 @@ class DdForwarder(object):
 
 def testDogStream():
     import logging
-    
+
     logger = logging.getLogger("datadog")
     logger.setLevel(logging.DEBUG)
     logger.addHandler(logging.StreamHandler())
@@ -547,7 +506,7 @@ def testDogStream():
 
 def testddForwarder():
     import logging
-    
+
     logger = logging.getLogger("datadog")
     logger.setLevel(logging.DEBUG)
     logger.addHandler(logging.StreamHandler())

@@ -133,10 +133,16 @@ class MetricsAggregator(object):
         self.total_count = 0
         self.count = 0
         self.metric_type_to_class = {
+            # Dogstatsd metric names
             'g': Gauge,
             'c': Counter,
             'h': Histogram,
-            'ms' : Histogram
+            'ms' : Histogram,
+
+            # Dogstream metric names
+            'counter' : Counter,
+            'gauge' : Gauge,
+            'histogram' : Histogram
         }
         self.hostname = hostname
         self.interval = interval
@@ -149,6 +155,12 @@ class MetricsAggregator(object):
             metric_class = self.metric_type_to_class[metric_type]
             self.metrics[context] = metric_class(name, tags, self.hostname)
         self.metrics[context].sample(float(value), sample_rate)
+
+    def submit_dogstream_metric(self, name, timestamp, value, attrs):
+        metric_type = str(attrs.get('metric_type', '')).lower()
+        tags = attrs.get('tags', None)
+        sample_rate = attrs.get('sample_rate', 1)
+        self.submit_metric(name, timestamp, value, metric_type, tags, sample_rate)
 
     def submit_packet(self, packet):
         """ Submit a dogstatsd packet. """
@@ -206,7 +218,18 @@ class MetricsAggregator(object):
         self.count = 0
         return metrics
 
-
+    def flush_dogstream_metrics(self):
+        metrics = self.flush(include_diagnostic_stats=False) # FIXME: include dogstream stats
+        dogstream_metrics = []
+        # Reformat the API format into the dogstream format.
+        for m in metrics:
+            dogstream_metrics.append((
+                m['metric'],
+                m['points'][0][0],
+                m['points'][0][1],
+                {}
+            ))
+        return {"dogstream": dogstream_metrics} if dogstream_metrics else {}
 
 class Reporter(threading.Thread):
     """
