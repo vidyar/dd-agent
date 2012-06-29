@@ -141,8 +141,17 @@ class MetricsAggregator(object):
         self.hostname = hostname
         self.interval = interval
 
-    def submit(self, packet):
+    def submit_metric(self, name, timestamp, value, metric_type, tags=None, sample_rate=1):
         self.count += 1
+        # Bucket metrics by interval, metric name and tags
+        context = (timestamp - timestamp % self.interval, name, tags)
+        if context not in self.metrics:
+            metric_class = self.metric_type_to_class[metric_type]
+            self.metrics[context] = metric_class(name, tags, self.hostname)
+        self.metrics[context].sample(float(value), sample_rate)
+
+    def submit_packet(self, packet):
+        """ Submit a dogstatsd packet. """
         # We can have colons in tags, so split once.
         name_and_metadata = packet.split(':', 1)
 
@@ -150,15 +159,15 @@ class MetricsAggregator(object):
             raise Exception('Unparseable packet: %s' % packet)
 
         name = name_and_metadata[0]
-        metadata = name_and_metadata[1].split('|')
+        md = name_and_metadata[1].split('|')
 
-        if len(metadata) < 2:
+        if len(md) < 2:
             raise Exception('Unparseable packet: %s' % packet)
 
         # Parse the optional values - sample rate & tags.
         sample_rate = 1
         tags = None
-        for m in metadata[2:]:
+        for m in md[2:]:
             # Parse the sample rate
             if m[0] == '@':
                 sample_rate = float(m[1:])
@@ -166,17 +175,7 @@ class MetricsAggregator(object):
             elif m[0] == '#':
                 tags = tuple(sorted(m[1:].split(',')))
 
-        # Bucket metrics by an interval of a few seconds to avoid race
-        # conditions betwen the threads.
-        timestamp = time.time()
-        interval = timestamp - timestamp % self.interval
-
-        context = (interval, name, tags)
-        if context not in self.metrics:
-            metric_class = self.metric_type_to_class[metadata[1]]
-            self.metrics[context] = metric_class(name, tags, self.hostname)
-        self.metrics[context].sample(float(metadata[0]), sample_rate)
-
+        self.submit_metric(name, time.time(), md[0], md[1], tags, sample_rate)
 
     def flush(self, include_diagnostic_stats=True):
         # Flush all completed intervals bucketed up to this time.
@@ -305,12 +304,12 @@ class Server(object):
 
         # Inline variables to speed up look-ups.
         buffer_size = self.buffer_size
-        aggregator_submit = self.metrics_aggregator.submit
+        aggregator_submit_packet = self.metrics_aggregator.submit_packet
         socket_recv = self.socket.recv
 
         while True:
             try:
-                aggregator_submit(socket_recv(buffer_size))
+                aggregator_submit_packet(socket_recv(buffer_size))
             except (KeyboardInterrupt, SystemExit):
                 break
             except:

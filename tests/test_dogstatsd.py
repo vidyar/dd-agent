@@ -17,11 +17,11 @@ class TestUnitDogStatsd(object):
 
     def test_tags(self):
         stats = MetricsAggregator('myhost', 1)
-        stats.submit('gauge:1|c')
-        stats.submit('gauge:2|c|@1')
-        stats.submit('gauge:4|c|#tag1,tag2')
-        stats.submit('gauge:8|c|#tag2,tag1') # Should be the same as above
-        stats.submit('gauge:16|c|#tag3,tag4')
+        stats.submit_packet('gauge:1|c')
+        stats.submit_packet('gauge:2|c|@1')
+        stats.submit_packet('gauge:4|c|#tag1,tag2')
+        stats.submit_packet('gauge:8|c|#tag2,tag1') # Should be the same as above
+        stats.submit_packet('gauge:16|c|#tag3,tag4')
 
         time.sleep(1)
 
@@ -50,10 +50,10 @@ class TestUnitDogStatsd(object):
         stats = MetricsAggregator('myhost', 1)
 
         # Track some counters.
-        stats.submit('my.first.counter:1|c')
-        stats.submit('my.first.counter:5|c')
-        stats.submit('my.second.counter:1|c')
-        stats.submit('my.third.counter:3|c')
+        stats.submit_packet('my.first.counter:1|c')
+        stats.submit_packet('my.first.counter:5|c')
+        stats.submit_packet('my.second.counter:1|c')
+        stats.submit_packet('my.third.counter:3|c')
 
         time.sleep(1)
         # Ensure they roll up nicely.
@@ -78,7 +78,7 @@ class TestUnitDogStatsd(object):
 
         # Submit a sampled counter.
         stats = MetricsAggregator('myhost', 1)
-        stats.submit('sampled.counter:1|c|@0.5')
+        stats.submit_packet('sampled.counter:1|c|@0.5')
         time.sleep(1)
         metrics = stats.flush(False)
         assert len(metrics) == 1
@@ -90,9 +90,9 @@ class TestUnitDogStatsd(object):
         stats = MetricsAggregator('myhost', 1)
 
         # Track some counters.
-        stats.submit('my.first.gauge:1|g')
-        stats.submit('my.first.gauge:5|g')
-        stats.submit('my.second.gauge:1.5|g')
+        stats.submit_packet('my.first.gauge:1|g')
+        stats.submit_packet('my.first.gauge:5|g')
+        stats.submit_packet('my.second.gauge:1.5|g')
 
         # Ensure they roll up nicely.
         time.sleep(1)
@@ -117,7 +117,7 @@ class TestUnitDogStatsd(object):
         stats = MetricsAggregator('myhost', 1)
 
         # Submit a sampled gauge metric.
-        stats.submit('sampled.gauge:10|g|@0.1')
+        stats.submit_packet('sampled.gauge:10|g|@0.1')
 
         # Assert that it's treated normally.
         time.sleep(1)
@@ -138,7 +138,7 @@ class TestUnitDogStatsd(object):
             for j in xrange(20):
                 for type_ in ['h', 'ms']:
                     m = 'my.p:%s|%s' % (i, type_)
-                    stats.submit(m)
+                    stats.submit_packet(m)
 
         time.sleep(2)
         metrics = self.sort_metrics(stats.flush(False))
@@ -162,7 +162,7 @@ class TestUnitDogStatsd(object):
     def test_sampled_histogram(self):
         # Submit a sampled histogram.
         stats = MetricsAggregator('myhost', 1)
-        stats.submit('sampled.hist:5|h|@0.5')
+        stats.submit_packet('sampled.hist:5|h|@0.5')
 
         time.sleep(1)
 
@@ -189,7 +189,7 @@ class TestUnitDogStatsd(object):
         stats = MetricsAggregator('myhost', 1)
         for packet in packets:
             try:
-                stats.submit(packet)
+                stats.submit_packet(packet)
             except:
                 assert True
             else:
@@ -198,7 +198,7 @@ class TestUnitDogStatsd(object):
     def test_diagnostic_stats(self):
         stats = MetricsAggregator('myhost', 1)
         for i in xrange(10):
-            stats.submit('metric:10|c')
+            stats.submit_packet('metric:10|c')
         time.sleep(1)
         metrics = self.sort_metrics(stats.flush())
         nt.assert_equals(2, len(metrics))
@@ -208,7 +208,7 @@ class TestUnitDogStatsd(object):
 
         nt.assert_equal(first['metric'], 'dd.dogstatsd.packet.count')
         nt.assert_equal(first['points'][0][1], 10)
-            
+
 
 
 
