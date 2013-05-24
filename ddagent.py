@@ -448,7 +448,8 @@ def init(conf):
 
 
 def main():
-    define("pycurl", default = 1, help="Use pycurl")
+    define("pycurl", default = 1, help = "Use pycurl")
+    define("sslcheck", default = 1, help = "Verify SSL hostname, on by default")
     args = parse_command_line()
 
     if unicode(options.pycurl) == u"0":
@@ -458,7 +459,7 @@ def main():
     agentConfig = get_config(parse_args = False)
 
     # Need to skip SSL cert host verification (e.g. using haproxy upstream)
-    if agentConfig.get('skip_ssl_host_verification', False):
+    if unicode(options.sslcheck) == u"0" or agentConfig.get('skip_ssl_host_verification', False):
         # monkey-patch the AsyncHTTPClient code
         import tornado.simple_httpclient
         tornado.simple_httpclient.match_hostname = lambda x, y: None
