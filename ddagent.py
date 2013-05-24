@@ -11,21 +11,19 @@
 '''
 
 # set up logging before importing any other components
-from config import initialize_logging; initialize_logging('forwarder')
+from config import initialize_logging
+initialize_logging('forwarder')
 from config import get_logging_config
-
-import os; os.umask(022)
 
 # Standard imports
 import logging
 import os
+os.umask(022)
 import sys
 import threading
 import zlib
 from Queue import Queue, Full
-from subprocess import Popen
-from hashlib import md5
-from datetime import datetime, timedelta
+from datetime import timedelta
 from socket import gaierror
 
 # Tornado
@@ -37,7 +35,6 @@ from tornado.options import define, parse_command_line, options
 
 # agent import
 from util import Watchdog, get_uuid, get_hostname, json
-from emitter import http_emitter, format_body
 from config import get_config
 from checks.check_status import ForwarderStatus
 from transaction import Transaction, TransactionManager
@@ -46,16 +43,17 @@ import modules
 log = logging.getLogger('forwarder')
 log.setLevel(get_logging_config()['log_level'] or logging.INFO)
 
-TRANSACTION_FLUSH_INTERVAL = 5000 # Every 5 seconds
-WATCHDOG_INTERVAL_MULTIPLIER = 10 # 10x flush interval
+TRANSACTION_FLUSH_INTERVAL = 5000  # Every 5 seconds
+WATCHDOG_INTERVAL_MULTIPLIER = 10  # 10x flush interval
 
 # Maximum delay before replaying a transaction
 MAX_WAIT_FOR_REPLAY = timedelta(seconds=90)
 
 # Maximum queue size in bytes (when this is reached, old messages are dropped)
-MAX_QUEUE_SIZE = 30 * 1024 * 1024 # 30MB
+MAX_QUEUE_SIZE = 30 * 1024 * 1024  # 30MB
 
-THROTTLING_DELAY = timedelta(microseconds=1000000/2) # 2 msg/second
+THROTTLING_DELAY = timedelta(microseconds=1000000 / 2)  # 2 msg/second
+
 
 class EmitterThread(threading.Thread):
 
@@ -84,6 +82,7 @@ class EmitterThread(threading.Thread):
         except Full:
             self.__logger.warn('Dropping packet for %r due to backlog', self.__name)
 
+
 class EmitterManager(object):
     """Track custom emitters"""
 
@@ -91,7 +90,9 @@ class EmitterManager(object):
         self.agentConfig = config
         self.emitterThreads = []
         for emitter_spec in [s.strip() for s in self.agentConfig.get('custom_emitters', '').split(',')]:
-            if len(emitter_spec) == 0: continue
+            if len(emitter_spec) == 0:
+                continue
+
             logging.info('Setting up custom emitter %r', emitter_spec)
             try:
                 thread = EmitterThread(
@@ -108,13 +109,14 @@ class EmitterManager(object):
 
     def send(self, data, headers=None):
         if not self.emitterThreads:
-            return # bypass decompression/decoding
+            return  # bypass decompression/decoding
         if headers and headers.get('Content-Encoding') == 'deflate':
             data = zlib.decompress(data)
         data = json_decode(data)
         for emitterThread in self.emitterThreads:
             logging.info('Queueing for emitter %r', emitterThread.name)
             emitterThread.enqueue(data, headers)
+
 
 class MetricTransaction(Transaction):
 
@@ -191,25 +193,24 @@ class MetricTransaction(Transaction):
             ssl_certificate = self._application._agentConfig.get('ssl_certificate', None)
 
             req = tornado.httpclient.HTTPRequest(url, method="POST",
-                body=self._data, 
-                headers=self._headers, 
-                # The settings below will just be used if we use the CurlAsyncHttpClient of tornado
-                # i.e. in case of connection using a proxy
-                proxy_host=proxy_settings['host'], 
-                proxy_port=proxy_settings['port'],
-                proxy_username=proxy_settings['user'],
-                proxy_password=proxy_settings['password'],
-                ca_certs=ssl_certificate
-                )
+                                                 body=self._data,
+                                                 headers=self._headers,
+                                                 # The settings below will just be used if we use the CurlAsyncHttpClient of tornado
+                                                 # i.e. in case of connection using a proxy
+                                                 proxy_host=proxy_settings['host'],
+                                                 proxy_port=proxy_settings['port'],
+                                                 proxy_username=proxy_settings['user'],
+                                                 proxy_password=proxy_settings['password'],
+                                                 ca_certs=ssl_certificate)
 
             if proxy_settings['host'] is not None and proxy_settings['port'] is not None:
                 log.debug("Configuring tornado to use proxy settings: %s:****@%s:%s" % (proxy_settings['user'],
-                    proxy_settings['host'], proxy_settings['port']))
+                                                                                        proxy_settings['host'],
+                                                                                        proxy_settings['port']))
                 tornado.httpclient.AsyncHTTPClient().configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
             else:
                 log.debug("Using Tornado simple HTTP Client")
             http = tornado.httpclient.AsyncHTTPClient()
-            
 
             # The success of this metric transaction should only depend on
             # whether or not it's successfully sent to datadoghq. If it fails
@@ -255,12 +256,13 @@ class StatusHandler(tornado.web.RequestHandler):
         transactions = m.get_transactions()
         for tr in transactions:
             self.write("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" %
-                (tr.get_id(), tr.get_size(), tr.get_error_count(), tr.get_next_flush()))
+                       (tr.get_id(), tr.get_size(), tr.get_error_count(), tr.get_next_flush()))
         self.write("</table>")
 
         if threshold >= 0:
             if len(transactions) > threshold:
                 self.set_status(503)
+
 
 class AgentInputHandler(tornado.web.RequestHandler):
 
@@ -278,6 +280,7 @@ class AgentInputHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(500)
 
         self.write("Transaction: %s" % tr.get_id())
+
 
 class ApiInputHandler(tornado.web.RequestHandler):
 
@@ -304,14 +307,16 @@ class Application(tornado.web.Application):
         MetricTransaction.set_application(self)
         MetricTransaction.set_endpoints()
         self._tr_manager = TransactionManager(MAX_WAIT_FOR_REPLAY,
-            MAX_QUEUE_SIZE, THROTTLING_DELAY)
+                                              MAX_QUEUE_SIZE,
+                                              THROTTLING_DELAY)
         MetricTransaction.set_tr_manager(self._tr_manager)
 
         self._watchdog = None
         if watchdog:
             watchdog_timeout = TRANSACTION_FLUSH_INTERVAL * WATCHDOG_INTERVAL_MULTIPLIER
             self._watchdog = Watchdog(watchdog_timeout,
-                max_mem_mb=agentConfig.get('limit_memory_consumption', None))
+                                      max_mem_mb=agentConfig.get('limit_memory_consumption', None))
+        self.mloop = None
 
     def log_request(self, handler):
         """ Override the tornado logging method.
@@ -329,13 +334,13 @@ class Application(tornado.web.Application):
 
     def appendMetric(self, prefix, name, host, device, ts, value):
 
-        if self._metrics.has_key(prefix):
+        if prefix in self._metrics:
             metrics = self._metrics[prefix]
         else:
             metrics = {}
             self._metrics[prefix] = metrics
 
-        if metrics.has_key(name):
+        if name in metrics:
             metrics[name].append([host, device, ts, value])
         else:
             metrics[name] = [[host, device, ts, value]]
@@ -347,7 +352,7 @@ class Application(tornado.web.Application):
             self._metrics['internalHostname'] = get_hostname(self._agentConfig)
             self._metrics['apiKey'] = self._agentConfig['api_key']
             MetricTransaction(json.dumps(self._metrics),
-                headers={'Content-Type': 'application/json'})
+                              headers = {'Content-Type': 'application/json'})
             self._metrics = {}
 
     def run(self):
@@ -393,8 +398,9 @@ class Application(tornado.web.Application):
             self._postMetrics()
             self._tr_manager.flush()
 
-        tr_sched = tornado.ioloop.PeriodicCallback(flush_trs,TRANSACTION_FLUSH_INTERVAL,
-            io_loop = self.mloop)
+        tr_sched = tornado.ioloop.PeriodicCallback(flush_trs,
+                                                   TRANSACTION_FLUSH_INTERVAL,
+                                                   io_loop = self.mloop)
 
         # Register optional Graphite listener
         gport = self._agentConfig.get("graphite_listen_port", None)
@@ -418,19 +424,20 @@ class Application(tornado.web.Application):
     def stop(self):
         self.mloop.stop()
 
-def init():
-    agentConfig = get_config(parse_args = False)
 
-    port = agentConfig.get('listen_port', 17123)
+def init(conf):
+    """Load tornado application
+    """
+    port = conf.get('listen_port', 17123)
     if port is None:
         port = 17123
     else:
         port = int(port)
 
-    app = Application(port, agentConfig)
+    app = Application(port, conf)
 
     def sigterm_handler(signum, frame):
-        log.info("caught sigterm. stopping")
+        log.info("Caught sigterm. stopping")
         app.stop()
 
     import signal
@@ -439,32 +446,34 @@ def init():
 
     return app
 
+
 def main():
-    define("pycurl", default=1, help="Use pycurl")
-    define("sslcheck", default=1, help="Verify SSL hostname, on by default")
+    define("pycurl", default = 1, help="Use pycurl")
     args = parse_command_line()
 
     if unicode(options.pycurl) == u"0":
         os.environ['USE_SIMPLE_HTTPCLIENT'] = "1"
 
-    if unicode(options.sslcheck) == u"0":
+    # Get the configuration loaded
+    agentConfig = get_config(parse_args = False)
+
+    # Need to skip SSL cert host verification (e.g. using haproxy upstream)
+    if agentConfig.get('skip_ssl_host_verification', False):
         # monkey-patch the AsyncHTTPClient code
         import tornado.simple_httpclient
         tornado.simple_httpclient.match_hostname = lambda x, y: None
-        print("Skipping SSL hostname validation, useful when using a transparent proxy")
 
     # If we don't have any arguments, run the server.
     if not args:
         import tornado.httpclient
-        app = init()
+        app = init(agentConfig)
         try:
             app.run()
         finally:
             ForwarderStatus.remove_latest_status()
 
     else:
-        usage = "%s [help|info]. Run with no commands to start the server" % (
-                                        sys.argv[0])
+        usage = "%s [help|info]. Run with no commands to start the server" % (sys.argv[0])
         command = args[0]
         if command == 'info':
             logging.getLogger().setLevel(logging.ERROR)
