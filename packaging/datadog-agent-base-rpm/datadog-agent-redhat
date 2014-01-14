@@ -30,6 +30,13 @@ PIDPATH="/var/run/dd-agent/"
 USE_SUPERVISOR="/usr/bin/dd-forwarder"
 SUPERVISOR_CONF="/etc/dd-agent/supervisor.conf"
 
+PATH=$PATH:/usr/share/datadog/agent/bin # add the location of supervisord bin
+PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/supervisor-3.0-py2.7.egg
+PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/meld3-0.6.10-py2.7.egg
+PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/tornado-3.1.1-py2.7.egg
+PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/setuptools-2.1dev-py2.7.egg
+export PYTHONPATH=$PYTHONPATH
+
 if [ -x "/usr/bin/python2.6" ]; then
     PYTHON="/usr/bin/python2.6"
 else
