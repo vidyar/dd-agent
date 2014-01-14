@@ -39,6 +39,7 @@ source:
 	cp -r $(SRC)/pup $(ROOT)/
 	cp -r $(SRC)/yaml $(ROOT)/
 	cp -r $(SRC)/libs $(ROOT)/
+	cp -r $(SRC)/bin $(ROOT)/
 	cp -r $(SRC)/checks.d $(ROOT)/
 	cp -r $(SRC)/compat $(ROOT)/
 	cp -r $(SRC)/conf.d $(ROOT)/
@@ -77,6 +78,8 @@ install_full: source
 	mkdir -p $(BUILD)/usr/bin
 	ln -sf ../share/datadog/agent/ddagent.py $(BUILD)/usr/bin/dd-forwarder
 	chmod 755 $(BUILD)/usr/bin/dd-forwarder
+	chmod 755 $(BUILD)/usr/share/datadog/agent/bin/supervisord
+	chmod 755 $(BUILD)/usr/share/datadog/agent/bin/supervisorctl
 
 # =====================
 # RPM
