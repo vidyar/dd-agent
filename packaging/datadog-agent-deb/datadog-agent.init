@@ -12,6 +12,10 @@
 
 . /lib/lsb/init-functions
 PATH=$PATH:/sbin # add the location of start-stop-daemon on Debian
+PATH=$PATH:/usr/share/datadog/agent/bin # add the location of supervisord bin
+PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/supervisor-3.0-py2.7.egg
+PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/meld3-0.6.10-py2.7.egg
+export PYTHONPATH=$PYTHONPATH
 
 AGENTPATH="/usr/bin/dd-agent"
 AGENTCONF="/etc/dd-agent/datadog.conf"

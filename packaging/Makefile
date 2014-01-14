@@ -38,12 +38,14 @@ source:
 	cp -r $(SRC)/dogstream $(ROOT)/
 	cp -r $(SRC)/pup $(ROOT)/
 	cp -r $(SRC)/yaml $(ROOT)/
+	cp -r $(SRC)/libs $(ROOT)/
 	cp -r $(SRC)/checks.d $(ROOT)/
 	cp -r $(SRC)/compat $(ROOT)/
 	cp -r $(SRC)/conf.d $(ROOT)/
 	cp -r $(SRC)/resources $(ROOT)/
 	cp -r $(SRC)/*.py $(ROOT)/
 	cp -r $(SRC)/LICENSE* $(ROOT)/
+	cp -r $(SRC)/ca-certificates.crt $(ROOT)/
 	cp -r $(SRC)/datadog.conf.example $(ROOT)/
 	cp -r $(SRC)/datadog-cert.pem $(ROOT)/
 	find $(ROOT) -name "*.pyc" -exec rm {} \;
@@ -144,8 +146,6 @@ datadog_agent_deb: clean install_deb
 $(FPM_BUILD) -t deb \
 -n datadog-agent \
 -d "python (>= 2.6)" \
--d "python-tornado (>= 2.3)" \
--d "supervisor (>= 3.0)" \
 -d "adduser" \
 -d "sysstat" \
 -d "python-pycurl" \
