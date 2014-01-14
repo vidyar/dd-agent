@@ -212,7 +212,7 @@ class MetricTransaction(Transaction):
                 tornado.httpclient.AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
             else:
-                tornado_client_params['ca_certs'] = os.path.join(os.path.dirname(__file__), 'ca-certificates.crt') 
+                tornado_client_params['ca_certs'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ca-certificates.crt")
                 req = tornado.httpclient.HTTPRequest(**tornado_client_params)
                 log.debug("Using Tornado simple HTTP Client")
                 
