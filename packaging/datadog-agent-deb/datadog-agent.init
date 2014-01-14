@@ -15,6 +15,7 @@ PATH=$PATH:/sbin # add the location of start-stop-daemon on Debian
 PATH=$PATH:/usr/share/datadog/agent/bin # add the location of supervisord bin
 PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/supervisor-3.0-py2.7.egg
 PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/meld3-0.6.10-py2.7.egg
+PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/tornado-3.1.1-py2.7.egg
 export PYTHONPATH=$PYTHONPATH
 
 AGENTPATH="/usr/bin/dd-agent"
@@ -82,13 +83,13 @@ case "$1" in
             exit 0
         fi
 
-       
+
         log_daemon_msg "Starting $DESC (using supervisord)" "$NAME"
         start-stop-daemon --start --quiet --oknodo --exec $SUPERVISORD -- -c $SUPERVISOR_FILE --pidfile $SUPERVISOR_PIDFILE
         if [ $? -ne 0 ]; then
             log_end_msg 1
         fi
-   
+
         # check if the agent is running once per second for 10 seconds
         retries=10
         while [ $retries -gt 1 ]; do
@@ -108,10 +109,10 @@ case "$1" in
         exit 1
         ;;
     stop)
-       
+
         log_daemon_msg "Stopping $DESC (stopping supervisord)" "$NAME"
         start-stop-daemon --stop --retry 30 --quiet --oknodo --pidfile $SUPERVISOR_PIDFILE
-   
+
         log_end_msg $?
 
         ;;
@@ -120,11 +121,11 @@ case "$1" in
         shift # Shift 'info' out of args so we can pass any
               # addtional options to the real command
               # (right now only dd-agent supports additional flags)
-        su $AGENTUSER -c "$AGENTPATH info $@"
+        $AGENTPATH info
         RETURN_VALUE=$?
-        su $AGENTUSER -c "$DOGSTATSDPATH info"
+        $DOGSTATSDPATH info
         RETURN_VALUE=$(($RETURN_VALUE || $?))
-        su $AGENTUSER -c "$FORWARDERPATH info"
+        $FORWARDERPATH info
         RETURN_VALUE=$(($RETURN_VALUE || $?))
         exit $RETURN_VALUE
         ;;
