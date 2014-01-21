@@ -390,7 +390,8 @@ def get_config(parse_args=True, cfg_path=None, options=None):
             agentConfig["skip_ssl_validation"] = _is_affirmative(config.get("Main", "skip_ssl_validation"))
 
         agentConfig["collect_ec2_tags"] = False
-        if config.has_option("Main", "collect_ec2_tags"):
+        if sys.version_info[:3] >= (2,5,0) and config.has_option("Main", "collect_ec2_tags"):
+            # Boto doesn't work on python2.4
             agentConfig["collect_ec2_tags"] = _is_affirmative(config.get("Main", "collect_ec2_tags"))
 
     except ConfigParser.NoSectionError, e:
