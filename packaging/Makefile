@@ -93,9 +93,8 @@ install_base_rpm: install_base
 install_full_rpm: install_base_rpm install_full
 	mkdir -p $(BUILD)/etc/dd-agent
 	mkdir -p $(BUILD)/usr/share/datadog/agent
-	cp datadog-agent-rpm/supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
-	cp datadog-agent-rpm/setup-supervisor.py $(BUILD)/usr/share/datadog/agent
-
+	cp supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
+	
 datadog_agent_base_rpm: clean install_base_rpm
 	FPM_EDITOR="echo '' >>" \
 $(FPM_BUILD) -t rpm \
@@ -137,7 +136,7 @@ install_deb: install_base install_full
 	cp datadog-agent-deb/datadog-agent.init $(BUILD)/etc/init.d/datadog-agent
 	chmod 755 $(BUILD)/etc/init.d/datadog-agent
 	# Install supervisor config.
-	cp datadog-agent-deb/supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
+	cp supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
 
 
 # Make the datadog agent debian package that includes supervisor, the forwarder
