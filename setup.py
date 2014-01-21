@@ -42,6 +42,7 @@ if sys.platform == 'win32':
         'elementtree',
         'pycurl',
         'MySQLdb',
+        'httplib2==0.7.6'
     ])
 
     # Modules to force-include in the exe
@@ -60,7 +61,6 @@ if sys.platform == 'win32':
 
         # agent
         'checks.services_checks',
-        'checks.libs.httplib2',
 
         # pup
         'pup',
