@@ -33,14 +33,21 @@ SUPERVISORD="/usr/share/datadog/agent/bin/supervisord"
 SUPERVISORCTL="/usr/share/datadog/agent/bin/supervisorctl"
 
 PATH=$PATH:/usr/share/datadog/agent/bin # add the location of supervisord bin
-PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/supervisor-3.0-py2.7.egg
-PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/meld3-0.6.10-py2.7.egg
-PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/tornado-3.1.1-py2.7.egg
-PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/setuptools-2.1dev-py2.7.egg
-PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/boto-2.15.0-py2.7.egg
-PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/httplib2-0.7.6-py2.7.egg
-PYTHONPATH=$PYTHONPATH:/usr/share/datadog/agent/libs/PyYAML-3.09-py2.7.egg
-export PYTHONPATH=$PYTHONPATH
+SUPERVISOR_PYTHONPATH=$SUPERVISOR_PYTHONPATH:/usr/share/datadog/agent/libs/supervisor-3.0-py2.7.egg
+SUPERVISOR_PYTHONPATH=$SUPERVISOR_PYTHONPATH:/usr/share/datadog/agent/libs/meld3-0.6.10-py2.7.egg
+SUPERVISOR_PYTHONPATH=$SUPERVISOR_PYTHONPATH:/usr/share/datadog/agent/libs/tornado-3.1.1-py2.7.egg
+SUPERVISOR_PYTHONPATH=$SUPERVISOR_PYTHONPATH:/usr/share/datadog/agent/libs/setuptools-2.1dev-py2.7.egg
+
+BASE_PYTHONPATH=$BASE_PYTHONPATH:/usr/share/datadog/agent/libs/boto-2.15.0-py2.7.egg
+BASE_PYTHONPATH=$BASE_PYTHONPATH:/usr/share/datadog/agent/libs/httplib2-0.7.6-py2.7.egg
+BASE_PYTHONPATH=$BASE_PYTHONPATH:/usr/share/datadog/agent/libs/PyYAML-3.09-py2.7.egg
+
+if [ -f $USE_SUPERVISOR ]; then
+    export PYTHONPATH=$SUPERVISOR_PYTHONPATH:$BASE_PYTHONPATH:$PATH
+else
+    export PYTHONPATH=$BASE_PYTHONPATH:$PATH
+fi
+
 if [ -x "/usr/bin/python2.6" ]; then
     PYTHON="/usr/bin/python2.6"
 else
@@ -139,9 +146,9 @@ start() {
         fi
         echo -n 'Starting Datadog Agent: '
         install -d -o $AGENTUSER $PIDPATH
-        daemon --user $AGENTUSER "env LANG=POSIX $PYTHON $AGENTPATH start init --clean > /dev/null 2>&1"
+        daemon --user $AGENTUSER "env LANG=POSIX env PYTHONPATH=$BASE_PYTHONPATH $PYTHON $AGENTPATH start init --clean > /dev/null 2>&1"
         RETURNVALUE=$?
-        daemon --user $AGENTUSER "env LANG=POSIX $PYTHON $DOGSTATSDPATH start > /dev/null 2>&1"
+        daemon --user $AGENTUSER "env LANG=POSIX env PYTHONPATH=$BASE_PYTHONPATH $PYTHON $DOGSTATSDPATH start > /dev/null 2>&1"
         RETURNVALUE=$(($RETURNVALUE || $?))
         echo
         [ $RETURNVALUE -eq 0 ] && touch $LOCKFILE
@@ -160,8 +167,8 @@ stop() {
         echo
     else
         echo -n 'Stopping Datadog Agent: '
-        daemon --user $AGENTUSER "env LANG=POSIX $PYTHON $AGENTPATH stop > /dev/null 2>&1"
-        daemon --user $AGENTUSER "env LANG=POSIX $PYTHON $DOGSTATSDPATH stop > /dev/null 2>&1"
+        daemon --user $AGENTUSER "env LANG=POSIX env PYTHONPATH=$BASE_PYTHONPATH $PYTHON $AGENTPATH stop > /dev/null 2>&1"
+        daemon --user $AGENTUSER "env LANG=POSIX env PYTHONPATH=$BASE_PYTHONPATH $PYTHON $DOGSTATSDPATH stop > /dev/null 2>&1"
         rm -f $LOCKFILE
         rm -f $PIDFILE
         sleep 5
@@ -190,7 +197,7 @@ info() {
 }
 
 configcheck() {
-    su $AGENTUSER -c "$AGENTPATH configcheck"
+    $AGENTPATH configcheck
     exit $?
 }
 
