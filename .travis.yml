@@ -54,6 +54,7 @@ before_script:
   - sudo service couchdb start
 env:
   - DB=redis
+  - PYTHONPATH=/home/travis/build/DataDog/dd-agent/libs/PyYAML-3.09-py2.7.egg:/home/travis/build/DataDog/dd-agent/libs/httplib2-0.7.6-py2.7.egg
 script: nosetests -A 'not windows' tests
 notifications:
   webhooks:
