@@ -41,6 +41,8 @@ source:
 	cp -r $(SRC)/checks.d $(ROOT)/
 	cp -r $(SRC)/compat $(ROOT)/
 	cp -r $(SRC)/conf.d $(ROOT)/
+	cp -r $(SRC)/bin $(ROOT)/
+	cp -r $(SRC)/libs $(ROOT)/
 	cp -r $(SRC)/resources $(ROOT)/
 	cp -r $(SRC)/*.py $(ROOT)/
 	cp -r $(SRC)/LICENSE* $(ROOT)/
@@ -71,10 +73,23 @@ install_base: source
 	chmod 755 $(BUILD)/var/log/datadog
 
 install_full: source
+	# Make supervisor executable
+	chmod 755 ../share/datadog/agent/bin/supervisorctl
+	chmod 755 ../share/datadog/agent/bin/supervisord
 	# Install the forwarder.
 	mkdir -p $(BUILD)/usr/bin
 	ln -sf ../share/datadog/agent/ddagent.py $(BUILD)/usr/bin/dd-forwarder
 	chmod 755 $(BUILD)/usr/bin/dd-forwarder
+	# Install the virtual env and the dependencies
+	python /usr/share/datadog/agent/libs/virtualenv.py --system-site-packages --no-pip --no-setuptools /usr/share/datadog/agent/venv
+	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/libs/ez_setup.py
+	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/libs/get-pip.py
+	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/pip install tornado==3.1.1
+	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/pip install supervisor==3.0
+	
+
+
+
 
 # =====================
 # RPM
@@ -88,8 +103,7 @@ install_base_rpm: install_base
 install_full_rpm: install_base_rpm install_full
 	mkdir -p $(BUILD)/etc/dd-agent
 	mkdir -p $(BUILD)/usr/share/datadog/agent
-	cp datadog-agent-rpm/supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
-	cp datadog-agent-rpm/setup-supervisor.py $(BUILD)/usr/share/datadog/agent
+	cp supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
 
 datadog_agent_base_rpm: clean install_base_rpm
 	FPM_EDITOR="echo '' >>" \
@@ -134,7 +148,7 @@ install_deb: install_base install_full
 	cp datadog-agent-deb/datadog-agent.init $(BUILD)/etc/init.d/datadog-agent
 	chmod 755 $(BUILD)/etc/init.d/datadog-agent
 	# Install supervisor config.
-	cp datadog-agent-deb/supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
+	cp supervisor.conf $(BUILD)/etc/dd-agent/supervisor.conf
 
 
 # Make the datadog agent debian package that includes supervisor, the forwarder
