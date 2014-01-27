@@ -115,8 +115,6 @@ datadog_agent_rpm: clean install_full_rpm
 $(FPM_BUILD) -t rpm \
 -n "datadog-agent" \
 -d "python(abi) >= 2.6" \
--d "python-tornado >= 2.2" \
--d "supervisor >= 3.0" \
 -d "sysstat" \
 -d "python-pycurl" \
 --conflicts "datadog-agent < $(VERSION)" \
@@ -149,8 +147,6 @@ datadog_agent_deb: clean install_deb
 $(FPM_BUILD) -t deb \
 -n datadog-agent \
 -d "python (>= 2.6)" \
--d "python-tornado (>= 2.3)" \
--d "supervisor (>= 3.0)" \
 -d "adduser" \
 -d "sysstat" \
 -d "python-pycurl" \
