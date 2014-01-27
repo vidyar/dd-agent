@@ -80,15 +80,6 @@ install_full: source
 	mkdir -p $(BUILD)/usr/bin
 	ln -sf ../share/datadog/agent/ddagent.py $(BUILD)/usr/bin/dd-forwarder
 	chmod 755 $(BUILD)/usr/bin/dd-forwarder
-	# Install the virtual env and the dependencies
-	python /usr/share/datadog/agent/libs/virtualenv.py --system-site-packages --no-pip --no-setuptools /usr/share/datadog/agent/venv
-	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/libs/ez_setup.py
-	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/libs/get-pip.py
-	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/pip install tornado==3.1.1
-	/usr/share/datadog/agent/venv/python /usr/share/datadog/agent/pip install supervisor==3.0
-	
-
-
 
 
 # =====================
