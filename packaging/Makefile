@@ -74,8 +74,8 @@ install_base: source
 
 install_full: source
 	# Make supervisor executable
-	chmod 755 ../share/datadog/agent/bin/supervisorctl
-	chmod 755 ../share/datadog/agent/bin/supervisord
+	chmod 755 $(BUILD)/usr/share/datadog/agent/bin/supervisord
+	chmod 755 $(BUILD)/usr/share/datadog/agent/bin/supervisorctl
 	# Install the forwarder.
 	mkdir -p $(BUILD)/usr/bin
 	ln -sf ../share/datadog/agent/ddagent.py $(BUILD)/usr/bin/dd-forwarder
