@@ -18,7 +18,7 @@ def get_http_library(proxy_settings, use_forwarder):
     else:
         # Python version < 2.6.3
         import urllib2proxy as urllib2
-    return urllib2 
+    return urllib2
 
 def post_headers(agentConfig, payload):
     return {
@@ -29,10 +29,32 @@ def post_headers(agentConfig, payload):
         'Content-MD5': md5(payload).hexdigest()
     }
 
+def _encode(message):
+    '''
+    Sometimes getting weird binary characters in the payload
+    This will ensure that the message is properly encoded for both
+    simplejson to be able to encode it and urrlib to then send it
+    Those characters will be just ignored.
+    '''
+    if isinstance(message, basestring):
+        return message.decode('utf8', 'ignore').encode('ascii')
+    elif isinstance(message, dict):
+        for (key, value) in message.iteritems():
+            message[key] = _encode(value)
+        return message
+    elif isinstance(message, (list, tuple)):
+        return [_encode(v) for v in message]
+    else:
+        return message
+
 def http_emitter(message, logger, agentConfig):
     "Send payload"
 
     logger.debug('http_emitter: attempting postback to ' + agentConfig['dd_url'])
+
+    # Encoding the message here to prevent encoding errors
+    # further down
+    message = _encode(message)
 
     # Post back the data
     payload = json.dumps(message)
@@ -74,7 +96,7 @@ def get_opener(logger, proxy_settings, use_forwarder, urllib2):
         return None
 
     if proxy_settings is None:
-        # urllib2 will figure out how to connect automatically        
+        # urllib2 will figure out how to connect automatically
         return None
 
     proxy_url = '%s:%s' % (proxy_settings['host'], proxy_settings['port'])
@@ -83,7 +105,7 @@ def get_opener(logger, proxy_settings, use_forwarder, urllib2):
         if proxy_settings.get('password') is not None:
             proxy_auth = '%s:%s' % (proxy_auth, proxy_settings['password'])
         proxy_url = '%s@%s' % (proxy_auth, proxy_url)
-        
+
     proxy = {'https': proxy_url}
     logger.info("Using proxy settings %s" % proxy)
     proxy_handler = urllib2.ProxyHandler(proxy)
